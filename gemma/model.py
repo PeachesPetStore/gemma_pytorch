@@ -23,6 +23,8 @@ from typing import Any, List, Optional, Sequence, Tuple, Union, Mapping
 
 from gemma import config as gemma_config
 from gemma import tokenizer
+from gemma.gemma1_layers import GemmaDecoderLayer
+from gemma.gemma2_layers import Gemma2DecoderLayer
 
 
 class Sampler(nn.Module):
@@ -337,125 +339,6 @@ class GemmaAttention(nn.Module):
             batch_size, input_len, -1))
         output = self.o_proj(output)
         return output
-
-
-class GemmaDecoderLayer(nn.Module):
-
-    def __init__(
-        self,
-        config: gemma_config.GemmaConfig,
-    ):
-        super().__init__()
-        self.attn_type = gemma_config.AttentionType.GLOBAL
-        self.self_attn = GemmaAttention(
-            config=config,
-            attn_type=self.attn_type)
-        self.mlp = GemmaMLP(
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            quant=config.quant,
-        )
-        self.input_layernorm = RMSNorm(config.hidden_size,
-                                       eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size,
-                                                eps=config.rms_norm_eps)
-
-    # TODO(imayank): Decouple Gemma versions into separate files.
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        freqs_cis: torch.Tensor,
-        kv_write_indices: torch.Tensor,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor],
-        mask: torch.Tensor,
-        local_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        # Self Attention
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = self.self_attn(
-            hidden_states=hidden_states,
-            freqs_cis=freqs_cis,
-            kv_write_indices=kv_write_indices,
-            kv_cache=kv_cache,
-            mask=mask,
-        )
-        hidden_states = residual + hidden_states
-
-        # MLP
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class Gemma2DecoderLayer(nn.Module):
-    def __init__(
-        self,
-        config: gemma_config.GemmaConfig,
-        attn_type: gemma_config.AttentionType,
-    ):
-        super().__init__()
-        self.attn_type = attn_type
-        self.self_attn = GemmaAttention(
-            config=config,
-            attn_type=self.attn_type,
-        )
-        self.mlp = GemmaMLP(
-            hidden_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            quant=config.quant,
-        )
-        self.input_layernorm = RMSNorm(config.hidden_size,
-                                       eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size,
-                                                eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = (
-            RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_pre_ffw_norm
-            else None
-        )
-        self.post_feedforward_layernorm = (
-            RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            if config.use_post_ffw_norm
-            else None
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        freqs_cis: torch.Tensor,
-        kv_write_indices: torch.Tensor,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor],
-        mask: torch.Tensor,
-        local_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        # Self Attention
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = self.self_attn(
-            hidden_states=hidden_states,
-            freqs_cis=freqs_cis,
-            kv_write_indices=kv_write_indices,
-            kv_cache=kv_cache,
-            mask=mask,
-            local_mask=local_mask,
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # MLP
-        residual = hidden_states
-        if self.pre_feedforward_layernorm is not None:
-            hidden_states = self.pre_feedforward_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        if self.post_feedforward_layernorm is not None:
-            hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class GemmaModel(nn.Module):
