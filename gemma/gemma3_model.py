@@ -257,11 +257,11 @@ class Gemma3ForMultimodalLM(nn.Module):
     prompt_mask_tensor = token_ids_tensor != self.tokenizer.pad_id
     curr_mask_tensor = mask_tensor.index_select(2, input_positions_tensor)
     curr_local_mask_tensor = local_mask_tensor.index_select(2, input_positions_tensor)
-    output_positions_tensor = torch.LongTensor([min_prompt_len - 1]).to(device)
-    temperatures_tensor = None if not temperature else torch.FloatTensor(
-            [temperature] * batch_size).to(device)
-    top_ps_tensor = torch.FloatTensor([top_p] * batch_size).to(device)
-    top_ks_tensor = torch.LongTensor([top_k] * batch_size).to(device)
+    output_positions_tensor = torch.tensor([min_prompt_len - 1], dtype=torch.long, device=device)
+    temperatures_tensor = None if not temperature else torch.tensor(
+            [temperature] * batch_size, dtype=torch.float, device=device)
+    top_ps_tensor = torch.tensor([top_p] * batch_size, dtype=torch.float, device=device)
+    top_ks_tensor = torch.tensor([top_k] * batch_size, dtype=torch.long, device=device)
     output_index = torch.tensor(min_prompt_len, dtype=torch.int64, device=device)
 
     # Prefill up to min_prompt_len tokens, then treat other prefill as

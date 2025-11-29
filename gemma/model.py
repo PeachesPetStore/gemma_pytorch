@@ -653,22 +653,20 @@ class GemmaForCausalLM(nn.Module):
 
     # prepare inputs
     token_ids_tensor = torch.full((batch_size, max_seq_len),
-                                      self.tokenizer.pad_id, dtype=torch.int64)
+                                      self.tokenizer.pad_id, dtype=torch.int64, device=device)
     input_token_ids_tensor = torch.full((batch_size, min_prompt_len),
                                             self.tokenizer.pad_id,
-                                            dtype=torch.int64)
+                                            dtype=torch.int64, device=device)
     for i, p in enumerate(prompt_tokens):
-      token_ids_tensor[i, :len(p)] = torch.tensor(p)
+      token_ids_tensor[i, :len(p)] = torch.tensor(p, device=device)
       input_token_ids_tensor[i, :min_prompt_len] = torch.tensor(
-                p[:min_prompt_len])
-    token_ids_tensor = token_ids_tensor.to(device)
-    input_token_ids_tensor = input_token_ids_tensor.to(device)
+                p[:min_prompt_len], device=device)
     prompt_mask_tensor = token_ids_tensor != self.tokenizer.pad_id
     input_positions_tensor = torch.arange(0, min_prompt_len,
-                                              dtype=torch.int64).to(device)
+                                              dtype=torch.int64, device=device)
     mask_tensor = torch.full((1, 1, max_seq_len, max_seq_len),
-                                 -2.3819763e38).to(torch.float)
-    mask_tensor = torch.triu(mask_tensor, diagonal=1).to(device)
+                                 -2.3819763e38, dtype=torch.float, device=device)
+    mask_tensor = torch.triu(mask_tensor, diagonal=1)
     local_mask_tensor = mask_tensor + torch.tril(
             torch.full((1, 1, max_seq_len, max_seq_len), -2.3819763e38, device=device),
             diagonal=-self.config.sliding_window_size,
@@ -677,13 +675,12 @@ class GemmaForCausalLM(nn.Module):
     curr_local_mask_tensor = local_mask_tensor.index_select(
           2, input_positions_tensor
       ) if local_mask_tensor is not None else None
-    output_positions_tensor = torch.LongTensor([min_prompt_len - 1]).to(device)
-    temperatures_tensor = None if not temperature else torch.FloatTensor(
-            [temperature] * batch_size).to(device)
-    top_ps_tensor = torch.FloatTensor([top_p] * batch_size).to(device)
-    top_ks_tensor = torch.LongTensor([top_k] * batch_size).to(device)
-    output_index = torch.tensor(min_prompt_len, dtype=torch.int64).to(
-            device)
+    output_positions_tensor = torch.tensor([min_prompt_len - 1], dtype=torch.long, device=device)
+    temperatures_tensor = None if not temperature else torch.tensor(
+            [temperature] * batch_size, dtype=torch.float, device=device)
+    top_ps_tensor = torch.tensor([top_p] * batch_size, dtype=torch.float, device=device)
+    top_ks_tensor = torch.tensor([top_k] * batch_size, dtype=torch.long, device=device)
+    output_index = torch.tensor(min_prompt_len, dtype=torch.int64, device=device)
 
     # Prefill up to min_prompt_len tokens, then treat other prefill as
     # decode and ignore output.
@@ -716,8 +713,7 @@ class GemmaForCausalLM(nn.Module):
       curr_local_mask_tensor = local_mask_tensor.index_select(
                 2, input_positions_tensor
             ) if local_mask_tensor is not None else None
-      output_positions_tensor = torch.tensor(0, dtype=torch.int64).to(
-                device)
+      output_positions_tensor = torch.tensor(0, dtype=torch.int64, device=device)
       output_index = output_index + 1
 
     # Detokenization.
